@@ -13,16 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: Sync Repository with GCS Preprod Bucket
+# This sync will execute when any combination of the following files,
+# and no other files, are changed on the main branch:
+# - timestamp.json
+# - snapshot.json
+# - [0-9]+.snapshot.json
+# Under this condition, the entire main branch (all files) will sync
+# to prod.
 
-# Execute this on changes to repository/repository/
+name: Sync Repository Main Branch with GCS Prod Bucket
+
 on:
   push:
     branches:
       - main
     paths:
-      # When any repository metadata is changed.
-      - 'repository/repository/**'
+      # When timestamp or snapshot files are changed
+      - 'repository/repository/timestamp.json'
+      - 'repository/repository/snapshot.json'
+      - 'repository/repository/[0-9]+.snapshot.json'
   workflow_dispatch:
 
 jobs:
@@ -40,7 +49,7 @@ jobs:
           check-latest: true
       - uses: google-github-actions/setup-gcloud@e30db14379863a8c79331b04a9969f4c1e225e0b # v1.1.1
         with:
-          project_id: project-rekor
+          project_id: project-rekor # production
       # Setup OIDC->SA auth
       - uses: google-github-actions/auth@35b0e87d162680511bf346c299f71c9c5c379033 # v1.1.1
         id: auth
@@ -77,20 +86,20 @@ jobs:
                 check_expiration repository/repository/$f
             fi;
 
-            gcloud --quiet storage cp --cache-control=no-store -r repository/repository/$f gs://sigstore-preprod-tuf-root/
+            gcloud --quiet storage cp --cache-control=no-store -r repository/repository/$f gs://sigstore-tuf-root/
           done
 
           # Upload timestamp after checking latest timestamp expiration
           check_expiration repository/repository/timestamp.json
-          gcloud --quiet storage cp --cache-control=no-store -r repository/repository/*timestamp.json gs://sigstore-preprod-tuf-root/
+          gcloud --quiet storage cp --cache-control=no-store -r repository/repository/*timestamp.json gs://sigstore-tuf-root/
 
-          # delete any files present in sigstore-preprod-tuf-root not in repository/repository
-          gcloud --quiet storage cp -r gs://sigstore-preprod-tuf-root/ .
+          # delete any files present in sigstore-tuf-root not in repository/repository
+          gcloud --quiet storage cp -r gs://sigstore-tuf-root/ .
 
-          diff -qr repository/repository sigstore-preprod-tuf-root | while read l; do
-            if [[ $l =~ "Only in sigstore-preprod-tuf-root" ]]; then
-              path=$(python3 -c "import re; s='$l'; pattern=r'^Only in sigstore-preprod-tuf-root(\/?)(.*): (.*)$'; match=re.search(pattern, s); print('/'.join([match.group(2), match.group(3)]).lstrip('/'))")
-              gcloud --quiet storage rm gs://sigstore-preprod-tuf-root/$path
+          diff -qr repository/repository sigstore-tuf-root | while read l; do
+            if [[ $l =~ "Only in sigstore-tuf-root" ]]; then
+              path=$(python3 -c "import re; s='$l'; pattern=r'^Only in sigstore-tuf-root(\/?)(.*): (.*)$'; match=re.search(pattern, s); print('/'.join([match.group(2), match.group(3)]).lstrip('/'))")
+              gcloud --quiet storage rm gs://sigstore-tuf-root/$path
             fi;
           done
 
